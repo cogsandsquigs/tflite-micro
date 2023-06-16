@@ -294,11 +294,11 @@ fn build_tflm() {
     // The path to the build directory.
     let tflite_parent = prepare_tensorflow_source();
     // The path to the tensorflow directory in the source directory.
-    let tflite = tflite_parent.join("tensorflow");
+    let tflite: PathBuf = tflite_parent.join("tensorflow");
+    // The path to the third party directory where helper libraries exist.
+    let tf_third_party_dir = tflite_parent.join("third_party");
     // The path to the output directory.
     let out_dir = env::var("OUT_DIR").unwrap();
-    // The path to the third party directory.
-    let tf_third_party_dir = tflite_parent.join("third_party");
     // The name of the final library to link.
     let tflm_lib_name = Path::new(&out_dir).join("tflm.a");
 
