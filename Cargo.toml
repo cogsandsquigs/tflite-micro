@@ -8,3 +8,8 @@
 	# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+
+[build-dependencies]
+	# Building C libraries.
+	cc         = { version = "1.0", features = ["parallel"] }
+	pkg-config = "0.3"
