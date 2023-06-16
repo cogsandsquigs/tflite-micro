@@ -366,12 +366,9 @@ fn build_tflm() {
         // Compile!
         builder_ref.compile("tflm");
 
-        println!(
-            "Building tensorflow micro from source took {:?}",
-            start.elapsed()
-        );
+        println!("Building TFLM from source took {:?}", start.elapsed());
     } else {
-        println!("Didn't rebuild tensorflow micro, using {:?}", tflm_lib_name);
+        println!("Not rebuilding TFLM, using {:?}", tflm_lib_name);
 
         println!("cargo:rustc-link-lib=static=tflm");
         println!("cargo:rustc-link-search=native={}", out_dir);
