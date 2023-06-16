@@ -6,6 +6,7 @@ use std::process::Command;
 use std::time::Instant;
 use std::{env, io};
 
+/// The location of the TFLM source directory.
 const TENSORFLOW_DIR_LOCATION: &str = "tflite-micro";
 
 trait CompilationBuilder {
@@ -78,6 +79,26 @@ impl CompilationBuilder for cc::Build {
     }
 }
 
+/// Get the manifest directory.
+fn manifest_dir() -> PathBuf {
+    PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+}
+
+/// Get TFLM source directory.
+fn tflm_src_dir() -> PathBuf {
+    manifest_dir().join("tflite-micro")
+}
+
+/// Get the flatbuffers include directory.
+fn flatbuffers_include_dir() -> PathBuf {
+    tflm_src_dir().join("tensorflow/lite/micro/tools/make/downloads/flatbuffers/include")
+}
+
+/// Check if the build is cross-compiling.
+fn is_cross_compiling() -> bool {
+    env::var("TARGET").unwrap() != env::var("HOST").unwrap() // TODO: remove `unwrap`s!
+}
+
 fn run_command_or_fail<P, S>(dir: &str, cmd: P, args: &[S])
 where
     P: AsRef<Path>,
@@ -111,33 +132,32 @@ where
     }
 }
 
-/**
- * `git checkout` the TFLM library if it's not already there. Also download thrid-party tools
- * and/or install pip packages.
- */
-fn prepare_tflm_dir() {
-    if !Path::new("tflite-micro/LICENSE").exists() {
-        eprintln!("Setting up TFLM git submodule...");
-        run_command_or_fail(".", "git", &["submodule", "update", "--init"]);
-    }
+/// `git checkout` the TFLM library if it's not already there. Also download thrid-party tools
+/// and/or install pip packages.
+fn update_tflm_repo() {
+    // if !Path::new("tflite-micro/LICENSE").exists() {
+    eprintln!("Setting up TFLM git submodule...");
+    run_command_or_fail(".", "git", &["submodule", "update", "--remote"]);
+    // }
 
-    if !Path::new(
-        "tflite-micro/tensorflow/lite/micro/tools/make/downloads/flatbuffers/CONTRIBUTING.md",
-    )
-    .exists()
-    {
-        eprintln!("Building tensorflow micro example to fetch Tensorflow dependencies...");
-        run_command_or_fail(
-            TENSORFLOW_DIR_LOCATION,
-            "make",
-            &[
-                "-f",
-                "tensorflow/lite/micro/tools/make/Makefile",
-                "test_micro_speech_test",
-            ],
-        );
-    }
+    // if !Path::new(
+    //     "tflite-micro/tensorflow/lite/micro/tools/make/downloads/flatbuffers/CONTRIBUTING.md",
+    // )
+    // .exists()
+    // {
+    //     eprintln!("Building tensorflow micro example to fetch Tensorflow dependencies...");
+    //     run_command_or_fail(
+    //         TENSORFLOW_DIR_LOCATION,
+    //         "make",
+    //         &[
+    //             "-f",
+    //             "tensorflow/lite/micro/tools/make/Makefile",
+    //             "test_micro_speech_test",
+    //         ],
+    //     );
+    // }
 
+    // See #199: https://github.com/tensorflow/tflite-micro/issues/199
     run_command_or_fail(
         TENSORFLOW_DIR_LOCATION,
         "make",
@@ -149,39 +169,8 @@ fn prepare_tflm_dir() {
     );
 }
 
-/**
- * Get the manifest directory.
- */
-fn manifest_dir() -> PathBuf {
-    PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
-}
-
-/**
- * Get TFLM source directory.
- */
-
-fn tflm_src_dir() -> PathBuf {
-    manifest_dir().join("tflite-micro")
-}
-
-/**
- * Get the flatbuffers include directory.
- */
-fn flatbuffers_include_dir() -> PathBuf {
-    tflm_src_dir().join("tensorflow/lite/micro/tools/make/downloads/flatbuffers/include")
-}
-
-/**
- * Check if the build is cross-compiling.
- */
-fn is_cross_compiling() -> bool {
-    env::var("TARGET").unwrap() != env::var("HOST").unwrap() // TODO: remove `unwrap`s!
-}
-
-/**
- * Return a Vec of all *.cc files in `path`, excluding those that have a
- * name containing 'test.cc'
- */
+/// Return a Vec of all *.cc files in `path`, excluding those that have a
+/// name containing 'test.cc'
 fn get_files_glob(path: PathBuf) -> Vec<String> {
     let mut paths: Vec<String> = vec![];
 
@@ -199,9 +188,7 @@ fn get_files_glob(path: PathBuf) -> Vec<String> {
         .collect()
 }
 
-/**
- * Gets the result of a command. Used to query GCC for locations of libraries and such.
- */
+/// Gets the result of a command. Used to query GCC for locations of libraries and such.
 fn get_command_result(command: &mut Command) -> io::Result<String> {
     command.output().map(|output| {
         if output.status.success() {
@@ -212,10 +199,8 @@ fn get_command_result(command: &mut Command) -> io::Result<String> {
     })
 }
 
-/**
- * Links the `libm` library. This is necessary because the `tflite-micro` library
- * depends on `libm`, but the `tflite-micro` build script doesn't link it.
- */
+/// Links the `libm` library. This is necessary because the `tflite-micro` library
+/// depends on `libm`, but the `tflite-micro` build script doesn't link it.
 fn link_libm() {
     // If we're cross-compiling, we have to jump through a couple more hoops to include libm.
     if is_cross_compiling() {
@@ -246,48 +231,74 @@ fn link_libm() {
     }
 }
 
-/**
- * Move the tensorflow source to the build directory so that we can build it
- * more cleanly. Returns the tensorflow directory within the source directory.
- */
-fn prepare_tensorflow_source() -> PathBuf {
-    println!("Moving TFLM source...");
-
+/// Build inline C++ code.
+fn build_inline_cpp() {
+    println!("Building inline C++...");
     let start = Instant::now();
+
+    cpp_build::Config::new()
+        .include(tflm_src_dir())
+        .include(flatbuffers_include_dir())
+        .tensorflow_build_setup()
+        .cpp_link_stdlib(None)
+        //.flag("-std=c++14")
+        .build("src/lib.rs");
+
+    println!("Building inline C++ took {:?}", start.elapsed());
+}
+
+/// Move the tensorflow source to the build directory so that we can build it
+/// more cleanly. Returns the tensorflow directory within the source directory.
+fn prepare_tensorflow_source() -> PathBuf {
+    println!("Preparing TFLM source...");
+
+    let start: Instant = Instant::now();
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let tflm_out_dir = out_dir.join("tflite-micro");
 
-    let copy_dir = fs_extra::dir::CopyOptions {
-        content_only: false,
-        overwrite: true,
-        skip_exist: false,
-        buffer_size: 65536,
-        copy_inside: false,
-        depth: 0,
-    };
+    // let copy_dir = fs_extra::dir::CopyOptions {
+    //     content_only: false,
+    //     overwrite: true,
+    //     skip_exist: false,
+    //     buffer_size: 65536,
+    //     copy_inside: false,
+    //     depth: 0,
+    // };
 
-    if !tflm_out_dir.exists() || cfg!(feature = "build") {
-        // Copy directory
-        println!("Copying TF from {:?}", tflm_src_dir());
-        println!("Copying TF to {:?}", out_dir);
+    // if !tflm_out_dir.exists() || cfg!(feature = "build") {
+    //     // Copy directory
+    //     println!("Copying TF from {:?}", tflm_src_dir());
+    //     println!("Copying TF to {:?}", out_dir);
 
-        fs_extra::dir::copy(tflm_src_dir(), &out_dir, &copy_dir)
-            .expect("Unable to copy tensorflow");
-    }
+    //     fs_extra::dir::copy(tflm_src_dir(), &out_dir, &copy_dir)
+    //         .expect("Unable to copy tensorflow");
+    // }
 
-    println!("Moving source took {:?}", start.elapsed());
+    // Thanks to @trylaarsdam for this tip to make this compile:
+    run_command_or_fail(
+        TENSORFLOW_DIR_LOCATION,
+        "python3",
+        &[
+            "tensorflow/lite/micro/tools/project_generation/create_tflm_tree.py",
+            &tflm_out_dir.to_string_lossy(),
+        ],
+    );
+
+    println!("Preparing source took {:?}", start.elapsed());
 
     tflm_out_dir
 }
 
-/**
- * Build the tensorflow library.
- */
+/// Build the tensorflow library.
 fn build_tflm() {
+    // The path to the build directory.
+    let tflite_parent = prepare_tensorflow_source();
     // The path to the tensorflow directory in the source directory.
-    let tflite = prepare_tensorflow_source().join("tensorflow");
+    let tflite = tflite_parent.join("tensorflow");
     // The path to the output directory.
     let out_dir = env::var("OUT_DIR").unwrap();
+    // The path to the third party directory.
+    let tf_third_party_dir = tflite_parent.join("third_party");
     // The name of the final library to link.
     let tflm_lib_name = Path::new(&out_dir).join("tflm.a");
 
@@ -295,22 +306,23 @@ fn build_tflm() {
     if !tflm_lib_name.exists() || cfg!(feature = "build") {
         println!("Building TFLM...");
 
-        let target: String = env::var("TARGET").unwrap_or_else(|_| "".to_string());
-        let tfmicro_mdir = tflite.join("lite/micro/tools/make/");
+        // TODO: See below!
+        // let target: String = env::var("TARGET").unwrap_or_else(|_| "".to_string());
         let start = Instant::now();
 
         let mut builder = cc::Build::new();
+
         let builder_ref = builder
             .cpp(true) // We're building with C++.
             .tensorflow_build_setup()
             .cpp_link_stdlib(None)
-            //
-            .include(tflite.parent().unwrap())
-            .include(tfmicro_mdir.join("downloads"))
-            .include(tfmicro_mdir.join("downloads/gemmlowp"))
-            .include(tfmicro_mdir.join("downloads/flatbuffers/include"))
-            .include(tfmicro_mdir.join("downloads/ruy"))
-            //
+            // Include helper libraries.
+            .include(&tflite_parent)
+            .include(&tf_third_party_dir)
+            .include(tf_third_party_dir.join("gemmlowp"))
+            .include(tf_third_party_dir.join("flatbuffers/include"))
+            .include(tf_third_party_dir.join("ruy"))
+            // Compile core TFLM files.
             .files(get_files_glob(tflite.join("lite/micro/*.cc")))
             .files(get_files_glob(tflite.join("lite/micro/kernels/*.cc")))
             .files(get_files_glob(
@@ -319,7 +331,7 @@ fn build_tflm() {
             .files(get_files_glob(
                 tflite.join("lite/experimental/microfrontend/lib/*.c"),
             ))
-            .file(tflite.join("lite/c/common.c"))
+            .file(tflite.join("lite/core/c/common.cc"))
             .file(tflite.join("lite/core/api/error_reporter.cc"))
             .file(tflite.join("lite/core/api/flatbuffer_conversions.cc"))
             .file(tflite.join("lite/core/api/op_resolver.cc"))
@@ -327,28 +339,29 @@ fn build_tflm() {
             .file(tflite.join("lite/kernels/internal/quantization_util.cc"))
             .file(tflite.join("lite/kernels/kernel_util.cc"));
 
-        // CMSIS-NN for ARM Cortex-M targets
-        if target.starts_with("thumb") && target.contains("m-none-") && cfg!(feature = "cmsis-nn") {
-            println!("Build includes CMSIS-NN.");
-            let cmsis = tflite.join("lite/micro/tools/make/downloads/cmsis");
+        // TODO: Add this back!
+        // // CMSIS-NN for ARM Cortex-M targets
+        // if target.starts_with("thumb") && target.contains("m-none-") && cfg!(feature = "cmsis-nn") {
+        //     println!("Build includes CMSIS-NN.");
+        //     let cmsis = tflite.join("lite/micro/tools/make/downloads/cmsis");
 
-            builder_ref
-                .files(get_files_glob(cmsis.join("CMSIS/NN/Source/*.c")))
-                .include(cmsis.join("CMSIS/NN/Include"))
-                .include(cmsis.join("CMSIS/DSP/Include"))
-                .include(cmsis.join("CMSIS/Core/Include"));
-        }
+        //     builder_ref
+        //         .files(get_files_glob(cmsis.join("CMSIS/NN/Source/*.c")))
+        //         .include(cmsis.join("CMSIS/NN/Include"))
+        //         .include(cmsis.join("CMSIS/DSP/Include"))
+        //         .include(cmsis.join("CMSIS/Core/Include"));
+        // }
 
         // Micro frontend.
         builder_ref
-            .include(tfmicro_mdir.join("downloads/kissfft"))
-            .include(tfmicro_mdir.join("downloads/kissfft/tools"))
+            .include(tf_third_party_dir.join("kissfft"))
+            .include(tf_third_party_dir.join("kissfft/tools"))
             .include(tflite.join("lite/experimental/microfrontend/lib"))
+            .file(tf_third_party_dir.join("kissfft/kiss_fft.c"))
+            .file(tf_third_party_dir.join("kissfft/tools/kiss_fftr.c"))
             .files(get_files_glob(
                 tflite.join("lite/experimental/microfrontend/lib/*.cc"),
-            ))
-            .file(tfmicro_mdir.join("downloads/kissfft/kiss_fft.c"))
-            .file(tfmicro_mdir.join("downloads/kissfft/tools/kiss_fftr.c"));
+            ));
 
         // Compile!
         builder_ref.compile("tflm");
@@ -365,27 +378,7 @@ fn build_tflm() {
     }
 }
 
-/**
- * Build inline C++ code.
- */
-fn build_inline_cpp() {
-    println!("Building inline C++...");
-    let start = Instant::now();
-
-    cpp_build::Config::new()
-        .include(tflm_src_dir())
-        .include(flatbuffers_include_dir())
-        .tensorflow_build_setup()
-        .cpp_link_stdlib(None)
-        //.flag("-std=c++14")
-        .build("src/lib.rs");
-
-    println!("Building inline C++ took {:?}", start.elapsed());
-}
-
-/**
- * The buildscript that builds the C++ code. Yay!
- */
+/// The buildscript that builds the C++ code. Yay!
 fn main() {
     // // Tell cargo to look for shared libraries in the specified directory
     // println!("cargo:rustc-link-search=./tflite-micro");
@@ -394,7 +387,7 @@ fn main() {
     // println!("cargo:rerun-if-changed=wrapper.h");
 
     // Begin the build process: checkout the TFLM library if it's not already there.
-    prepare_tflm_dir();
+    update_tflm_repo();
 
     // Tell cargo to link `libm` as a dependency for tflite-micro.
     link_libm();
