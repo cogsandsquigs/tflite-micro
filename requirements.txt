@@ -1,0 +1,2 @@
+numpy
+pillow # WTF? why pillow, and *image processing library*???

@@ -6,10 +6,61 @@
 	version = "0.1.0"
 
 	# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+	# include only the necessary parts of tensorflow
+	include = [
+		"!**/*_test.cc",      # No tests
+		"!.gdb_history",      # From gitignore
+		"!vgcore.*",
+		"**/*.rs",
+		"/*.md",
+		"LICENSE-*",
+		"csrc/**",
+		"examples/models/**",
+		"src/**",
+		# Downloads
+		"submodules/tensorflow/tensorflow/lite/micro/tools/make/downloads/cmsis",
+		"submodules/tensorflow/tensorflow/lite/micro/tools/make/downloads/flatbuffers/include/**",
+		"submodules/tensorflow/tensorflow/lite/micro/tools/make/downloads/gemmlowp/**/*.h",
+		"submodules/tensorflow/tensorflow/lite/micro/tools/make/downloads/kissfft",
+		"submodules/tensorflow/tensorflow/lite/micro/tools/make/downloads/ruy",
+		# Micro
+		"submodules/tensorflow/tensorflow/lite/micro/*.[ch]*",
+		"submodules/tensorflow/tensorflow/lite/micro/kernels/**/*.[ch]*",
+		"submodules/tensorflow/tensorflow/lite/micro/memory_planner/*.[ch]*",
+		"submodules/tensorflow/tensorflow/lite/micro/testing/*.h",
+		# Lite
+		"submodules/tensorflow/tensorflow/lite/*.[ch]*",
+		"submodules/tensorflow/tensorflow/lite/c/**/*.[ch]*",
+		"submodules/tensorflow/tensorflow/lite/core/api",
+		"submodules/tensorflow/tensorflow/lite/experimental/microfrontend/lib",
+		"submodules/tensorflow/tensorflow/lite/kernels/**/*.[ch]*",
+		"submodules/tensorflow/tensorflow/lite/micro/memory_planner/*.cc",
+		"submodules/tensorflow/tensorflow/lite/schema/schema_generated.h",
+		# Core
+		"submodules/tensorflow/tensorflow/core/public/*.h",
+	]
+
+	[package.metadata.docs.rs]
+		all-features        = false
+		default-target      = "x86_64-unknown-linux-gnu"
+		no-default-features = true
 
 [dependencies]
+	cpp           = "0.5"
+	cty           = "0.2"
+	log           = { version = "0.4", default-features = false }
+	managed       = { version = "0.8", default-features = false }
+	ordered-float = { version = "~2.0.0", default-features = false }
 
 [build-dependencies]
-	# Building C libraries.
-	cc         = { version = "1.0", features = ["parallel"] }
+	# Binding C/C++ libraries.
+	bindgen = "0.66"
+
+	# Building C/C++ libraries.
+	cc         = { version = "1", features = ["parallel"] }
+	cpp_build  = "0.5"
 	pkg-config = "0.3"
+
+	# Misc.
+	fs_extra = "1.3" # Copying source files.
+	glob     = "0.3" # Globbing files.
