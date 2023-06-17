@@ -1,153 +1,25 @@
-use glob::glob;
-use std::borrow::Borrow;
-use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+mod utils;
+
+use std::path::PathBuf;
 use std::time::Instant;
-use std::{env, io};
-
-/// The location of the TFLM source directory.
-const TENSORFLOW_DIR_LOCATION: &str = "tflite-micro";
-
-trait CompilationBuilder {
-    fn flag(&mut self, s: &str) -> &mut Self;
-    fn define(&mut self, var: &str, val: Option<&str>) -> &mut Self;
-
-    /// Build flags for tensorflow micro sources
-    fn tensorflow_build_setup(&mut self) -> &mut Self {
-        let target = env::var("TARGET").unwrap_or_else(|_| "".to_string());
-
-        let build = self
-            .flag("-fno-rtti") // No Runtime type information
-            .flag("-fmessage-length=0")
-            .flag("-fno-exceptions")
-            .flag("-fno-unwind-tables")
-            .flag("-ffunction-sections")
-            .flag("-fdata-sections")
-            .flag("-funsigned-char")
-            .flag("-MMD")
-            .flag("-std=c++11")
-            .flag("-fno-delete-null-pointer-checks")
-            .flag("-fomit-frame-pointer")
-            .flag("-fpermissive")
-            .flag("-fno-use-cxa-atexit")
-            // use a full word for enums, this should match clang's behaviour
-            .flag("-fno-short-enums")
-            .define("TF_LITE_STATIC_MEMORY", None)
-            .define("TF_LITE_MCU_DEBUG_LOG", None)
-            .define("GEMMLOWP_ALLOW_SLOW_SCALAR_FALLBACK", None);
-
-        // warnings on by default
-        let build = if cfg!(feature = "no-c-warnings") {
-            build.flag("-w")
-        } else {
-            build
-                .flag("-Wvla")
-                .flag("-Wall")
-                .flag("-Wextra")
-                .flag("-Wno-unused-parameter")
-                .flag("-Wno-missing-field-initializers")
-                .flag("-Wno-write-strings")
-                .flag("-Wno-sign-compare")
-                .flag("-Wunused-function")
-        };
-
-        if target.starts_with("thumb") {
-            // unaligned accesses are usually a poor idea on ARM cortex-m
-            build.flag("-mno-unaligned-access")
-        } else {
-            build
-        }
-    }
-}
-
-impl CompilationBuilder for cpp_build::Config {
-    fn flag(&mut self, s: &str) -> &mut Self {
-        self.flag(s)
-    }
-    fn define(&mut self, var: &str, val: Option<&str>) -> &mut Self {
-        self.define(var, val)
-    }
-}
-
-impl CompilationBuilder for cc::Build {
-    fn flag(&mut self, s: &str) -> &mut Self {
-        self.flag(s)
-    }
-    fn define(&mut self, var: &str, val: Option<&str>) -> &mut Self {
-        self.define(var, val)
-    }
-}
-
-/// Get the manifest directory.
-fn manifest_dir() -> PathBuf {
-    PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
-}
-
-/// Get TFLM source directory.
-fn tflm_src_dir() -> PathBuf {
-    manifest_dir().join("tflite-micro")
-}
-
-/// Get the flatbuffers include directory.
-fn flatbuffers_include_dir() -> PathBuf {
-    tflm_src_dir().join("tensorflow/lite/micro/tools/make/downloads/flatbuffers/include")
-}
-
-/// Check if the build is cross-compiling.
-fn is_cross_compiling() -> bool {
-    env::var("TARGET").unwrap() != env::var("HOST").unwrap() // TODO: remove `unwrap`s!
-}
-
-fn run_command_or_fail<P, S>(dir: &str, cmd: P, args: &[S])
-where
-    P: AsRef<Path>,
-    S: Borrow<str> + AsRef<OsStr>,
-{
-    let cmd = cmd.as_ref();
-    let cmd = if cmd.components().count() > 1 && cmd.is_relative() {
-        // If `cmd` is a relative path (and not a bare command that should be
-        // looked up in PATH), absolutize it relative to `dir`, as otherwise the
-        // behavior of std::process::Command is undefined.
-        // https://github.com/rust-lang/rust/issues/37868
-        PathBuf::from(dir)
-            .join(cmd)
-            .canonicalize()
-            .expect("canonicalization failed")
-    } else {
-        PathBuf::from(cmd)
-    };
-    eprintln!(
-        "Running command: \"{} {}\" in dir: {}",
-        cmd.display(),
-        args.join(" "),
-        dir
-    );
-    let ret = Command::new(cmd).current_dir(dir).args(args).status();
-    match ret.map(|status| (status.success(), status.code())) {
-        Ok((true, _)) => {}
-        Ok((false, Some(c))) => panic!("Command failed with error code {}", c),
-        Ok((false, None)) => panic!("Command got killed"),
-        Err(e) => panic!("Command failed with error: {}", e),
-    }
-}
+use utils::*;
 
 /// `git checkout` the TFLM library if it's not already there. Also download thrid-party tools
 /// and/or install pip packages.
 fn update_tflm_repo() {
-    // if !Path::new("tflite-micro/LICENSE").exists() {
-    eprintln!("Setting up TFLM git submodule...");
-    run_command_or_fail(".", "git", &["submodule", "update", "--remote"]);
-    // }
+    // Check if the TFLM library is already checked out. If not, download it.
+    if TENSORFLOW_LOCATION.join("LICENSE").exists() {
+        eprintln!("Setting up TFLM git submodule...");
+        run_command_or_fail(".", "git", &["submodule", "update", "--remote"]);
+    }
 
-    // if !Path::new(
-    //     "tflite-micro/tensorflow/lite/micro/tools/make/downloads/flatbuffers/CONTRIBUTING.md",
-    // )
-    // .exists()
+    // if !TENSORFLOW_LOCATION
+    //     .join("tensorflow/lite/micro/tools/make/downloads/flatbuffers/CONTRIBUTING.md")
+    //     .exists()
     // {
     //     eprintln!("Building tensorflow micro example to fetch Tensorflow dependencies...");
     //     run_command_or_fail(
-    //         TENSORFLOW_DIR_LOCATION,
+    //         TENSORFLOW_LOCATION,
     //         "make",
     //         &[
     //             "-f",
@@ -159,7 +31,7 @@ fn update_tflm_repo() {
 
     // See #199: https://github.com/tensorflow/tflite-micro/issues/199
     run_command_or_fail(
-        TENSORFLOW_DIR_LOCATION,
+        &TENSORFLOW_LOCATION,
         "make",
         &[
             "-f",
@@ -167,36 +39,6 @@ fn update_tflm_repo() {
             "third_party_downloads",
         ],
     );
-}
-
-/// Return a Vec of all *.cc files in `path`, excluding those that have a
-/// name containing 'test.cc'
-fn get_files_glob(path: PathBuf) -> Vec<String> {
-    let mut paths: Vec<String> = vec![];
-
-    for entry in glob(&path.to_string_lossy()).unwrap() {
-        let p: PathBuf = entry.unwrap();
-        paths.push(p.to_string_lossy().to_string());
-    }
-
-    paths
-        .into_iter()
-        .filter(|p| !p.contains("test.cc"))
-        .filter(|p| !p.contains("debug_log.cc"))
-        .filter(|p| !p.contains("frontend_memmap"))
-        .filter(|p| !p.contains("frontend_main"))
-        .collect()
-}
-
-/// Gets the result of a command. Used to query GCC for locations of libraries and such.
-fn get_command_result(command: &mut Command) -> io::Result<String> {
-    command.output().map(|output| {
-        if output.status.success() {
-            String::from_utf8(output.stdout).expect("Output should be UTF-8!")
-        } else {
-            panic!("Couldn't read output from GCC.")
-        }
-    })
 }
 
 /// Links the `libm` library. This is necessary because the `tflite-micro` library
@@ -230,6 +72,136 @@ fn link_libm() {
         println!("cargo:rustc-link-lib=m");
     }
 }
+/// Configure bindgen for cross-compiling
+fn bindgen_cross_builder() -> bindgen::Builder {
+    let builder = bindgen::Builder::default().clang_arg("--verbose");
+
+    if is_cross_compiling() {
+        // Setup target triple
+        let builder = builder.clang_arg(format!("--target={}", TARGET));
+        println!("Setting bindgen to cross compile to {}", TARGET);
+
+        // Find the sysroot used by the crosscompiler, and pass this to clang
+        let mut gcc = cc::Build::new().get_compiler().to_command();
+        let path =
+            get_command_result(gcc.arg("--print-sysroot")).expect("Error querying gcc for sysroot");
+        let builder = builder.clang_arg(format!("--sysroot={}", path.trim()));
+
+        // Add a path to the system headers for the target
+        // compiler. Possibly we end up using a gcc header with clang
+        // frontend, which is sketchy.
+        let search_paths = cc::Build::new()
+            .cpp(true)
+            .get_compiler()
+            .to_command()
+            .arg("-E")
+            .arg("-Wp,-v")
+            .arg("-xc++")
+            .arg(".")
+            .output()
+            .map(|output| {
+                // We have to scrape the gcc console output to find where
+                // the c++ headers are. If we only needed the c headers we
+                // could use `--print-file-name=include` but that's not
+                // possible.
+                let gcc_out = String::from_utf8(output.stderr).expect("Error parsing gcc output");
+
+                // Scrape the search paths
+                let search_start = gcc_out.find("search starts here").unwrap();
+                let search_paths: Vec<PathBuf> = gcc_out[search_start..]
+                    .split('\n')
+                    .map(|p| PathBuf::from(p.trim()))
+                    .filter(|path| path.exists())
+                    .collect();
+
+                search_paths
+            })
+            .expect("Error querying gcc for include paths");
+
+        // Add scraped paths to builder
+        let mut builder = builder.detect_include_paths(false);
+        for path in search_paths {
+            builder = builder.clang_arg(format!("-I{}", path.to_string_lossy()));
+        }
+        builder
+    } else {
+        builder
+    }
+}
+
+/// This generates "tflite_types.rs" containing structs and enums which are
+/// inter-operable with rust
+fn bindgen_tflite_types() {
+    use bindgen::*;
+
+    // let submodules = submodules();
+    // let submodules_str = submodules.to_string_lossy();
+    let tflite_types_name = OUT_DIR.join("tflite_types.rs");
+
+    if !tflite_types_name.exists() || cfg!(feature = "build") {
+        println!("Running bindgen");
+        let start = Instant::now();
+
+        let bindings = bindgen_cross_builder()
+            .allowlist_recursively(true)
+            .prepend_enum_name(false)
+            .impl_debug(true)
+            .with_codegen_config(CodegenConfig::TYPES)
+            .layout_tests(false)
+            .enable_cxx_namespaces()
+            .derive_default(true)
+            .size_t_is_usize(true)
+            .use_core()
+            .ctypes_prefix("cty")
+            // Types
+            .allowlist_type("tflite::MicroErrorReporter")
+            .opaque_type("tflite::MicroErrorReporter")
+            .allowlist_type("tflite::Model")
+            .opaque_type("tflite::Model")
+            .allowlist_type("tflite::MicroInterpreter")
+            .opaque_type("tflite::MicroInterpreter")
+            .allowlist_type("tflite::ops::micro::AllOpsResolver")
+            .opaque_type("tflite::ops::micro::AllOpsResolver")
+            .allowlist_type("TfLiteTensor")
+            .allowlist_type("FrontendState")
+            .allowlist_type("FrontendConfig")
+            .allowlist_type("FrontendOutput")
+            // Types - blocklist
+            .blocklist_type("std")
+            .blocklist_type("tflite::Interpreter_TfLiteDelegatePtr")
+            .blocklist_type("tflite::Interpreter_State")
+            .default_enum_style(EnumVariation::Rust {
+                non_exhaustive: false,
+            })
+            .derive_partialeq(true)
+            .derive_eq(true)
+            .header("c/wrapper.h")
+            .clang_arg(format!(
+                "-I{}/tensorflow",
+                TENSORFLOW_LOCATION.to_string_lossy()
+            ))
+            .clang_arg(format!(
+                // -> flatbuffers/flatbuffers.h
+                "-I{}",
+                flatbuffers_include_dir().to_string_lossy()
+            ))
+            .clang_arg("-DGEMMLOWP_ALLOW_SLOW_SCALAR_FALLBACK")
+            .clang_arg("-xc++")
+            .clang_arg("-std=c++17"); // C++17 is required for flatbuffers
+
+        let bindings = bindings.generate().expect("Unable to generate bindings");
+
+        // Write the bindings to $OUT_DIR/tflite_types.rs
+        let out_path = OUT_DIR.join("tflite_types.rs");
+        bindings
+            .write_to_file(out_path)
+            .expect("Couldn't write bindings!");
+
+        println!("Running bindgen took {:?}", start.elapsed());
+    } else {
+        println!("Didn't regenerate bindings");
+    }
+}
 
 /// Build inline C++ code.
 fn build_inline_cpp() {
@@ -237,8 +209,11 @@ fn build_inline_cpp() {
     let start = Instant::now();
 
     cpp_build::Config::new()
-        .include(tflm_src_dir())
-        .include(flatbuffers_include_dir())
+        .include(&TENSORFLOW_LOCATION)
+        .include(
+            TENSORFLOW_LOCATION
+                .join("tensorflow/lite/micro/tools/make/downloads/flatbuffers/include"),
+        )
         .tensorflow_build_setup()
         .cpp_link_stdlib(None)
         //.flag("-std=c++14")
@@ -253,8 +228,7 @@ fn prepare_tensorflow_source() -> PathBuf {
     println!("Preparing TFLM source...");
 
     let start: Instant = Instant::now();
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let tflm_out_dir = out_dir.join("tflite-micro");
+    let tflm_out_dir = OUT_DIR.join("tflite-micro");
 
     // let copy_dir = fs_extra::dir::CopyOptions {
     //     content_only: false,
@@ -267,22 +241,24 @@ fn prepare_tensorflow_source() -> PathBuf {
 
     // if !tflm_out_dir.exists() || cfg!(feature = "build") {
     //     // Copy directory
-    //     println!("Copying TF from {:?}", tflm_src_dir());
-    //     println!("Copying TF to {:?}", out_dir);
+    //     println!("Copying TF from {:?}", tensorflow_src_dir());
+    //     println!("Copying TF to {:?}", OUT_DIR);
 
-    //     fs_extra::dir::copy(tflm_src_dir(), &out_dir, &copy_dir)
+    //     fs_extra::dir::copy(tensorflow_src_dir(), &OUT_DIR, &copy_dir)
     //         .expect("Unable to copy tensorflow");
     // }
 
-    // Thanks to @trylaarsdam for this tip to make this compile:
-    run_command_or_fail(
-        TENSORFLOW_DIR_LOCATION,
-        "python3",
-        &[
-            "tensorflow/lite/micro/tools/project_generation/create_tflm_tree.py",
-            &tflm_out_dir.to_string_lossy(),
-        ],
-    );
+    if !tflm_out_dir.exists() || cfg!(feature = "build") {
+        // Thanks to @trylaarsdam for this tip to make this compile:
+        run_command_or_fail(
+            &TENSORFLOW_LOCATION,
+            "python3",
+            &[
+                "tensorflow/lite/micro/tools/project_generation/create_tflm_tree.py",
+                &tflm_out_dir.to_string_lossy(),
+            ],
+        );
+    }
 
     println!("Preparing source took {:?}", start.elapsed());
 
@@ -297,10 +273,8 @@ fn build_tflm() {
     let tflite: PathBuf = tflite_parent.join("tensorflow");
     // The path to the third party directory where helper libraries exist.
     let tf_third_party_dir = tflite_parent.join("third_party");
-    // The path to the output directory.
-    let out_dir = env::var("OUT_DIR").unwrap();
     // The name of the final library to link.
-    let tflm_lib_name = Path::new(&out_dir).join("tflm.a");
+    let tflm_lib_name = OUT_DIR.join("tflm.a");
 
     // If we don't have the library, or we're building it, build and bind TFLM.
     if !tflm_lib_name.exists() || cfg!(feature = "build") {
@@ -370,28 +344,26 @@ fn build_tflm() {
     } else {
         println!("Not rebuilding TFLM, using {:?}", tflm_lib_name);
 
+        // Tell cargo to link the tflm library.
         println!("cargo:rustc-link-lib=static=tflm");
-        println!("cargo:rustc-link-search=native={}", out_dir);
+        println!("cargo:rustc-link-search=native={}", OUT_DIR.display());
     }
 }
 
 /// The buildscript that builds the C++ code. Yay!
 fn main() {
-    // // Tell cargo to look for shared libraries in the specified directory
-    // println!("cargo:rustc-link-search=./tflite-micro");
-
-    // // Tell cargo to invalidate the built crate whenever the wrapper changes
-    // println!("cargo:rerun-if-changed=wrapper.h");
-
     // Begin the build process: checkout the TFLM library if it's not already there.
     update_tflm_repo();
 
     // Tell cargo to link `libm` as a dependency for tflite-micro.
     link_libm();
 
-    // Build inline C++!
+    // Build the bindings.
+    bindgen_tflite_types();
+
+    // Build inline C++.
     build_inline_cpp();
 
-    // Finally, build the tensorflow library.
+    // Build the tensorflow library.
     build_tflm();
 }
