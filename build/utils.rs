@@ -107,11 +107,6 @@ impl CompilationBuilder for cc::Build {
     }
 }
 
-/// Get the flatbuffers source directory.
-pub fn flatbuffers_include_dir() -> PathBuf {
-    TENSORFLOW_LOCATION.join("tensorflow/lite/micro/tools/make/downloads/flatbuffers/include")
-}
-
 /// Check if the build is cross-compiling.
 pub fn is_cross_compiling() -> bool {
     env::var("TARGET").expect("Could not get target triple!")

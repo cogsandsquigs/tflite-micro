@@ -1,6 +1,6 @@
 //! magic_wand example
 //!
-use tfmicro::{MicroInterpreter, Model, MutableOpResolver};
+use tflite_micro::{MicroInterpreter, Model, MutableOpResolver};
 
 extern crate itertools;
 
@@ -14,17 +14,14 @@ fn magic_wand() {
     info!("---- Starting tensorflow micro example: magic_wand");
 
     let model = include_bytes!("../examples/models/magic_wand.tflite");
-    let ring =
-        &include_bytes!("../examples/models/ring_micro_f9643d42_nohash_4.data")
-            .chunks_exact(4)
-            .map(|c| f32::from_be_bytes([c[0], c[1], c[2], c[3]]))
-            .collect_vec();
-    let slope = &include_bytes!(
-        "../examples/models/slope_micro_f2e59fea_nohash_1.data"
-    )
-    .chunks_exact(4)
-    .map(|c| f32::from_be_bytes([c[0], c[1], c[2], c[3]]))
-    .collect_vec();
+    let ring = &include_bytes!("../examples/models/ring_micro_f9643d42_nohash_4.data")
+        .chunks_exact(4)
+        .map(|c| f32::from_be_bytes([c[0], c[1], c[2], c[3]]))
+        .collect_vec();
+    let slope = &include_bytes!("../examples/models/slope_micro_f2e59fea_nohash_1.data")
+        .chunks_exact(4)
+        .map(|c| f32::from_be_bytes([c[0], c[1], c[2], c[3]]))
+        .collect_vec();
 
     // Instantiate the model from the file
     let model = Model::from_buffer(&model[..]).unwrap();
@@ -40,8 +37,7 @@ fn magic_wand() {
         .softmax();
 
     let mut interpreter =
-        MicroInterpreter::new(&model, micro_op_resolver, &mut tensor_arena[..])
-            .unwrap();
+        MicroInterpreter::new(&model, micro_op_resolver, &mut tensor_arena[..]).unwrap();
 
     // Four indices:
     // WingScore
@@ -52,11 +48,7 @@ fn magic_wand() {
     test_gesture(&mut interpreter, ring, 1);
 }
 
-fn test_gesture(
-    interpreter: &mut MicroInterpreter,
-    data: &[f32],
-    expected_idx: usize,
-) {
+fn test_gesture(interpreter: &mut MicroInterpreter, data: &[f32], expected_idx: usize) {
     interpreter.input(0, data).unwrap();
     assert_eq!(
         [1, 128, 3, 1],

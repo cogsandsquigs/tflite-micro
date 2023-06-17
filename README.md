@@ -1,10 +1,10 @@
 # tflite-micro
 
-Rust bindings to TensorFlow Lite for Microcontrollers, but updated!
+`no_std` Rust bindings to TensorFlow Lite for Microcontrollers, but updated!
 
-Much of this code was copied or inspired by [Recognition2/tfmicro](https://github.com/Recognition2/tfmicro), so kudos to them for figuring out how to build the library.
+Much of this code was copied from or inspired by [Recognition2/tfmicro](https://github.com/Recognition2/tfmicro), so kudos to them for figuring out how to build the library.
 
-TODO: Actually add bindings!
+This library is different in that it is up-to-date with the latest version of TensorFlow Lite for Microcontrollers, pulling from [tensorflow/tflite-micro](https://github.com/tensorflow/tflite-micro) instead of [tensorflow/tensorflow](https://github.com/tensorflow/tensorflow).
 
 ## Building
 

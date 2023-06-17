@@ -1,15 +1,12 @@
 //! micro_speech example, from audio files
 
-use tfmicro::{Frontend, MicroInterpreter, Model, MutableOpResolver};
+use tflite_micro::{Frontend, MicroInterpreter, Model, MutableOpResolver};
 
 use itertools::Itertools;
 use log::info;
 
 /// Returns 40 elements of micro_feature from an audio slice
-fn micro_speech_frontend(
-    frontend: &mut Frontend,
-    audio_slice: &[i16],
-) -> [u8; 40] {
+fn micro_speech_frontend(frontend: &mut Frontend, audio_slice: &[i16]) -> [u8; 40] {
     // Run generate_micro_features
     let mut output: [u16; 40] = [0; 40];
     frontend.generate_micro_features(audio_slice, &mut output);
@@ -39,11 +36,10 @@ fn micro_speech_with_audio() {
         .chunks_exact(2)
         .map(|c| i16::from_le_bytes([c[0], c[1]]))
         .collect_vec();
-    let yes_1000ms =
-        &include_bytes!("../examples/models/yes_1000ms_sample.data")
-            .chunks_exact(2)
-            .map(|c| i16::from_le_bytes([c[0], c[1]]))
-            .collect_vec();
+    let yes_1000ms = &include_bytes!("../examples/models/yes_1000ms_sample.data")
+        .chunks_exact(2)
+        .map(|c| i16::from_le_bytes([c[0], c[1]]))
+        .collect_vec();
 
     // Frontend for creating micro_features
     let mut frontend = Frontend::new().unwrap();
@@ -65,8 +61,7 @@ fn micro_speech_with_audio() {
 
     // Build an interpreter to run the model with
     let mut interpreter =
-        MicroInterpreter::new(&model, micro_op_resolver, &mut tensor_arena[..])
-            .unwrap();
+        MicroInterpreter::new(&model, micro_op_resolver, &mut tensor_arena[..]).unwrap();
 
     // Check properties of the input sensor
     assert_eq!([1, 49, 40, 1], interpreter.input_info(0).dims);

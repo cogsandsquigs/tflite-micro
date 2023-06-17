@@ -1,6 +1,6 @@
 //! micro_speech example
 
-use tfmicro::{MicroInterpreter, Model, MutableOpResolver};
+use tflite_micro::{MicroInterpreter, Model, MutableOpResolver};
 
 use log::info;
 
@@ -10,10 +10,8 @@ fn micro_speech() {
     info!("---- Starting tensorflow micro example: micro_speech");
 
     let model = include_bytes!("../examples/models/micro_speech.tflite");
-    let no =
-        include_bytes!("../examples/models/no_micro_f9643d42_nohash_4.data");
-    let yes =
-        include_bytes!("../examples/models/yes_micro_f2e59fea_nohash_1.data");
+    let no = include_bytes!("../examples/models/no_micro_f9643d42_nohash_4.data");
+    let yes = include_bytes!("../examples/models/yes_micro_f2e59fea_nohash_1.data");
 
     // Map the model into a usable data structure. This doesn't involve
     // any copying or parsing, it's a very lightweight operation.
@@ -34,8 +32,7 @@ fn micro_speech() {
 
     // Build an interpreter to run the model with
     let mut interpreter =
-        MicroInterpreter::new(&model, micro_op_resolver, &mut tensor_arena[..])
-            .unwrap();
+        MicroInterpreter::new(&model, micro_op_resolver, &mut tensor_arena[..]).unwrap();
 
     // Check properties of the input sensor
     assert_eq!([1, 49, 40, 1], interpreter.input_info(0).dims);

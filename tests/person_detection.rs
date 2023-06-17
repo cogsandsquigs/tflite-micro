@@ -1,6 +1,6 @@
 //! person_detection example
 //!
-use tfmicro::{MicroInterpreter, Model, MutableOpResolver};
+use tflite_micro::{MicroInterpreter, Model, MutableOpResolver};
 
 use itertools::Itertools;
 use log::info;
@@ -12,13 +12,9 @@ fn person_detection() {
     info!("---- Starting tensorflow micro example: person_detection");
 
     // Include trained model and test datasets
-    let model =
-        include_bytes!("../examples/models/person_detection_grayscale.tflite");
-    let no_person = include_bytes!(
-        "../examples/models/no_person_image_data_grayscale.data"
-    );
-    let person =
-        include_bytes!("../examples/models/person_image_data_grayscale.data");
+    let model = include_bytes!("../examples/models/person_detection_grayscale.tflite");
+    let no_person = include_bytes!("../examples/models/no_person_image_data_grayscale.data");
+    let person = include_bytes!("../examples/models/person_image_data_grayscale.data");
 
     // Map the model into a usable data structure. This doesn't involve
     // any copying or parsing, it's a very lightweight operation.
@@ -35,8 +31,7 @@ fn person_detection() {
 
     // Build an interpreter to run the model with
     let mut interpreter =
-        MicroInterpreter::new(&model, micro_op_resolver, &mut tensor_arena[..])
-            .unwrap();
+        MicroInterpreter::new(&model, micro_op_resolver, &mut tensor_arena[..]).unwrap();
 
     // Check properties of the input sensor
     interpreter.input(0, person).unwrap();
