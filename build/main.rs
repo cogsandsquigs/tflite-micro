@@ -8,7 +8,7 @@ use utils::*;
 /// and/or install pip packages.
 fn update_tflm_repo() {
     // Check if the TFLM library is already checked out. If not, download it.
-    if TENSORFLOW_LOCATION.join("LICENSE").exists() {
+    if !TENSORFLOW_LOCATION.join("LICENSE").exists() {
         eprintln!("Setting up TFLM git submodule...");
         run_command_or_fail(".", "git", &["submodule", "update", "--remote"]);
     }
@@ -46,6 +46,8 @@ fn update_tflm_repo() {
 fn link_libm() {
     // If we're cross-compiling, we have to jump through a couple more hoops to include libm.
     if is_cross_compiling() {
+        println!("b");
+
         let mut gcc = cc::Build::new().get_compiler().to_command();
 
         // Find include directory used by the crosscompiler for libm.
@@ -134,12 +136,11 @@ fn bindgen_cross_builder() -> bindgen::Builder {
 fn bindgen_tflite_types() {
     use bindgen::*;
 
-    // let submodules = submodules();
-    // let submodules_str = submodules.to_string_lossy();
     let tflite_types_name = OUT_DIR.join("tflite_types.rs");
 
     if !tflite_types_name.exists() || cfg!(feature = "build") {
-        println!("Running bindgen");
+        println!("Running bindgen...");
+
         let start = Instant::now();
 
         let bindings = bindgen_cross_builder()
@@ -177,14 +178,15 @@ fn bindgen_tflite_types() {
             .derive_eq(true)
             .header("c/wrapper.h")
             .clang_arg(format!(
-                "-I{}/tensorflow",
-                TENSORFLOW_LOCATION.to_string_lossy()
+                "-include{}/tensorflow/lite/micro/micro_common.h",
+                TENSORFLOW_LOCATION
             ))
-            .clang_arg(format!(
-                // -> flatbuffers/flatbuffers.h
-                "-I{}",
-                flatbuffers_include_dir().to_string_lossy()
-            ))
+            .clang_arg(format!("-I{}", TENSORFLOW_LOCATION))
+            .clang_arg(format!("-I{}/tensorflow", TENSORFLOW_LOCATION))
+            .clang_arg(format!("-I{}", flatbuffers_include_dir().to_string_lossy())) // -> flatbuffers/flatbuffers.h
+            .clang_arg(format!("-I{}/tensorflow/lite", TENSORFLOW_LOCATION))
+            .clang_arg(format!("-I{}/tensorflow/lite/micro", TENSORFLOW_LOCATION)) // -> micro/micro_common.h
+            .clang_arg(format!("-I{}/tensorflow/lite/c", TENSORFLOW_LOCATION)) // -> c/common.h
             .clang_arg("-DGEMMLOWP_ALLOW_SLOW_SCALAR_FALLBACK")
             .clang_arg("-xc++")
             .clang_arg("-std=c++17"); // C++17 is required for flatbuffers

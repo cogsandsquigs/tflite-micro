@@ -114,7 +114,8 @@ pub fn flatbuffers_include_dir() -> PathBuf {
 
 /// Check if the build is cross-compiling.
 pub fn is_cross_compiling() -> bool {
-    TARGET.to_string() != HOST.to_string()
+    env::var("TARGET").expect("Could not get target triple!")
+        != env::var("HOST").expect("Could not get host triple!")
 }
 
 pub fn run_command_or_fail<P1, P2, S>(dir: P1, cmd: P2, args: &[S])
