@@ -2,63 +2,6 @@ use crate::utils::*;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-/// Configure bindgen for cross-compiling
-fn bindgen_cross_builder() -> bindgen::Builder {
-    let builder = bindgen::Builder::default().clang_arg("--verbose");
-
-    if is_cross_compiling() {
-        // Setup target triple
-        let builder = builder.clang_arg(format!("--target={}", TARGET));
-        println!("Setting bindgen to cross compile to {}", TARGET);
-
-        // Find the sysroot used by the crosscompiler, and pass this to clang
-        let mut gcc = cc::Build::new().get_compiler().to_command();
-        let path =
-            get_command_result(gcc.arg("--print-sysroot")).expect("Error querying gcc for sysroot");
-        let builder = builder.clang_arg(format!("--sysroot={}", path.trim()));
-
-        // Add a path to the system headers for the target
-        // compiler. Possibly we end up using a gcc header with clang
-        // frontend, which is sketchy.
-        let search_paths = cc::Build::new()
-            .cpp(true)
-            .get_compiler()
-            .to_command()
-            .arg("-E")
-            .arg("-Wp,-v")
-            .arg("-xc++")
-            .arg(".")
-            .output()
-            .map(|output| {
-                // We have to scrape the gcc console output to find where
-                // the c++ headers are. If we only needed the c headers we
-                // could use `--print-file-name=include` but that's not
-                // possible.
-                let gcc_out = String::from_utf8(output.stderr).expect("Error parsing gcc output");
-
-                // Scrape the search paths
-                let search_start = gcc_out.find("search starts here").unwrap();
-                let search_paths: Vec<PathBuf> = gcc_out[search_start..]
-                    .split('\n')
-                    .map(|p| PathBuf::from(p.trim()))
-                    .filter(|path| path.exists())
-                    .collect();
-
-                search_paths
-            })
-            .expect("Error querying gcc for include paths");
-
-        // Add scraped paths to builder
-        let mut builder = builder.detect_include_paths(false);
-        for path in search_paths {
-            builder = builder.clang_arg(format!("-I{}", path.to_string_lossy()));
-        }
-        builder
-    } else {
-        builder
-    }
-}
-
 /// This generates "tflite_types.rs" containing structs and enums which are
 /// inter-operable with rust
 pub fn bindgen_tflite_types(tensorflow_location: &Path) {
@@ -168,5 +111,62 @@ pub fn bindgen_tflite_types(tensorflow_location: &Path) {
         println!("Running bindgen took {:?}", start.elapsed());
     } else {
         println!("Didn't regenerate bindings");
+    }
+}
+
+/// Configure bindgen for cross-compiling
+fn bindgen_cross_builder() -> bindgen::Builder {
+    let builder = bindgen::Builder::default().clang_arg("--verbose");
+
+    if is_cross_compiling() {
+        // Setup target triple
+        let builder = builder.clang_arg(format!("--target={}", TARGET));
+        println!("Setting bindgen to cross compile to {}", TARGET);
+
+        // Find the sysroot used by the crosscompiler, and pass this to clang
+        let mut gcc = cc::Build::new().get_compiler().to_command();
+        let path =
+            get_command_result(gcc.arg("--print-sysroot")).expect("Error querying gcc for sysroot");
+        let builder = builder.clang_arg(format!("--sysroot={}", path.trim()));
+
+        // Add a path to the system headers for the target
+        // compiler. Possibly we end up using a gcc header with clang
+        // frontend, which is sketchy.
+        let search_paths = cc::Build::new()
+            .cpp(true)
+            .get_compiler()
+            .to_command()
+            .arg("-E")
+            .arg("-Wp,-v")
+            .arg("-xc++")
+            .arg(".")
+            .output()
+            .map(|output| {
+                // We have to scrape the gcc console output to find where
+                // the c++ headers are. If we only needed the c headers we
+                // could use `--print-file-name=include` but that's not
+                // possible.
+                let gcc_out = String::from_utf8(output.stderr).expect("Error parsing gcc output");
+
+                // Scrape the search paths
+                let search_start = gcc_out.find("search starts here").unwrap();
+                let search_paths: Vec<PathBuf> = gcc_out[search_start..]
+                    .split('\n')
+                    .map(|p| PathBuf::from(p.trim()))
+                    .filter(|path| path.exists())
+                    .collect();
+
+                search_paths
+            })
+            .expect("Error querying gcc for include paths");
+
+        // Add scraped paths to builder
+        let mut builder = builder.detect_include_paths(false);
+        for path in search_paths {
+            builder = builder.clang_arg(format!("-I{}", path.to_string_lossy()));
+        }
+        builder
+    } else {
+        builder
     }
 }
