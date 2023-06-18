@@ -55,7 +55,7 @@ pub trait CompilationBuilder {
             .flag("-fdata-sections")
             .flag("-funsigned-char")
             .flag("-MMD")
-            .flag("-std=c++17") // TODO: This should be c++11, but the compiler throws a hissy fit.
+            .flag("-std=c++17")
             .flag("-fno-delete-null-pointer-checks")
             .flag("-fomit-frame-pointer")
             .flag("-fpermissive")

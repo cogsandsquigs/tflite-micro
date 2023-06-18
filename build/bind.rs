@@ -100,7 +100,12 @@ pub fn bindgen_tflite_types(tensorflow_location: &Path) {
             .clang_arg("-xc++")
             .clang_arg("-std=c++17"); // C++17 is required for flatbuffers
 
-        let bindings = bindings.generate().expect("Unable to generate bindings");
+        // Dump the preprocessed input for debugging. Stored in __bindgen.* files.
+        bindings
+            .dump_preprocessed_input()
+            .expect("Unable to dump preprocessed input!");
+
+        let bindings = bindings.generate().expect("Unable to generate bindings!");
 
         // Write the bindings to $OUT_DIR/tflite_types.rs
         let out_path = OUT_DIR.join("tflite_types.rs");

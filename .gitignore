@@ -1,2 +1,5 @@
 /target/
 Cargo.lock
+
+# Generated debug files from bindgen
+__bindgen.*

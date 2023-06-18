@@ -47,7 +47,7 @@ pub fn build_inline_cpp(tensorflow_location: &Path) {
         .include(tensorflow_location.join("third_party/gemmlowp"))
         .tensorflow_build_setup()
         .cpp_link_stdlib(None)
-        //.flag("-std=c++14")
+        .flag("-std=c++17")
         .build("src/lib.rs");
 
     println!("Building inline C++ took {:?}", start.elapsed());
